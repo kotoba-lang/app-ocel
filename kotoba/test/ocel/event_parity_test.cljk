@@ -1,0 +1,27 @@
+(ns ocel.event-parity-test
+  "aiueos/ocel_event.cljk（判定コア）と正本（events.ts / types.ts）の parity。
+  閉じた集合とエラー名が変われば落ちる drift 検査。"
+  (:require [clojure.test :refer [deftest is testing]]
+            [clojure.string :as str]
+            ["fs" :as fs]))
+
+(def events-src
+  (fs/readFileSync (str/join "/" ["kotoba" "src" "events.ts"]) "utf8"))
+(def types-src
+  (fs/readFileSync (str/join "/" ["kotoba" "src" "types.ts"]) "utf8"))
+
+(deftest event-rules-match-guest
+  (testing "guest test-phase: EventPhase は start / end / milestone / checkpoint / complete"
+    (doseq [p ["start" "end" "milestone" "checkpoint" "complete"]]
+      (is (str/includes? types-src p))))
+  (testing "guest test-status: EventStatus は pending / running / success / failure / cancelled / blocked"
+    (doseq [s ["pending" "running" "success" "failure" "cancelled" "blocked"]]
+      (is (str/includes? types-src s))))
+  (testing "guest test-missing / test-invalid: 拒否のエラー名"
+    (is (str/includes? events-src "missingRequiredFields"))
+    (is (str/includes? events-src "invalidEventPhase"))
+    (is (str/includes? events-src "invalidEventStatus"))
+    (is (str/includes? events-src "invalidEventId")))
+  (testing "guest test-admission: 必須 4 フィールド"
+    (is (str/includes? events-src "!input.eventId"))
+    (is (str/includes? events-src "!input.actorDid"))))

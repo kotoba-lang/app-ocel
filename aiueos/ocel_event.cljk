@@ -1,0 +1,76 @@
+(ns ocel.event
+  "OCEL event admission 判定コア — itonami dapp bundle（pure, :effects #{}）。
+
+  OCEL v2 イベント記録の判定（正本: kotoba/src/events.ts の recordEvent +
+  types.ts の閉じた集合）:
+
+  - 必須: eventId / eventType / activity / actorDid。欠落は
+    missingRequiredFields で拒否。
+  - **phase は閉じた集合**（start / end / milestone / checkpoint / complete）。
+  - **status は閉じた集合**（pending / running / success / failure /
+    cancelled / blocked）。
+  - eventId の slug 化に失敗したら invalidEventId で拒否。
+  - rkey=event-{slug} は**冪等**（same rkey は alreadyExists 形で dedup）。
+
+  phase-ok: 1 = 0..4（start=0 .. complete=4）の内
+  status-ok: 1 = 0..5（pending=0 .. blocked=5）の内
+  event-admission の戻り: 0 = 記録可 / 1 = missingRequiredFields
+    / 2 = invalidEventPhase / 3 = invalidEventStatus / 4 = invalidEventId
+  dedup-take: 1 = 既存を返す / 0 = 新規
+
+  実行 host はスカラーのみ = KIR v3 / i64/direct ABI（kernel/selfhost 両対応）。
+
+  テストはゼロ引数 test-*、戻り 1/0:
+  <amu> test aiueos/ocel_event.cljk"
+  (:export [main phase-ok status-ok event-admission dedup-take
+            test-phase test-status test-admission test-missing
+            test-invalid test-dedup test-fail-closed]))
+
+(defn main [] :i64
+  0)
+
+(defn phase-ok [code :i64] :i64
+  (if (and (>= code 0) (<= code 4)) 1 0))
+
+(defn status-ok [code :i64] :i64
+  (if (and (>= code 0) (<= code 5)) 1 0))
+
+(defn event-admission [has-id :i64 has-type :i64 has-activity :i64 has-actor :i64 slug-ok :i64 phase-code :i64 status-code :i64] :i64
+  (if (or (= has-id 0) (= has-type 0) (= has-activity 0) (= has-actor 0))
+    1
+    (if (= (phase-ok phase-code) 0)
+      2
+      (if (= (status-ok status-code) 0)
+        3
+        (if (= slug-ok 1) 0 4)))))
+
+(defn dedup-take [same-rkey :i64 has-existing :i64] :i64
+  (if (and (= same-rkey 1) (= has-existing 1)) 1 0))
+
+;; --- tests（戻り 1 = pass） ------------------------------------------------
+
+(defn test-phase [] :i64
+  ;; start=0 .. complete=4 の 5 つ
+  (if (= (+ (phase-ok 0) (phase-ok 4) (phase-ok 5) (phase-ok -1)) 2) 1 0))
+
+(defn test-status [] :i64
+  ;; pending=0 .. blocked=5 の 6 つ
+  (if (= (+ (status-ok 0) (status-ok 5) (status-ok 6)) 2) 1 0))
+
+(defn test-admission [] :i64
+  (if (= (event-admission 1 1 1 1 1 0 0) 0) 1 0))
+
+(defn test-missing [] :i64
+  ;; 必須 4 つのどれか欠落
+  (if (= (+ (event-admission 0 1 1 1 1 0 0) (event-admission 1 1 1 0 1 0 0)) 2) 1 0))
+
+(defn test-invalid [] :i64
+  ;; phase / status / slug の順で拒否
+  (if (= (+ (event-admission 1 1 1 1 1 5 0) (event-admission 1 1 1 1 1 0 6) (event-admission 1 1 1 1 0 0 0)) 9) 1 0))
+
+(defn test-dedup [] :i64
+  (if (= (+ (dedup-take 1 1) (dedup-take 1 0) (dedup-take 0 1)) 1) 1 0))
+
+(defn test-fail-closed [] :i64
+  ;; 全必須欠落 + 閉じた集合外は拒否
+  (if (= (+ (event-admission 0 0 0 0 0 9 9) (event-admission 1 1 1 1 1 9 9)) 3) 1 0))

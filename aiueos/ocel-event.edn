@@ -1,0 +1,18 @@
+;; app-ocel — itonami（dapp）の aiueos アプリ記述子（notes.edn 形）。
+;; 判定コアは aiueos/ocel_event.cljk（OCEL event の admission・閉じた集合・冪等）。
+;; 正本は kotoba/src/events.ts + types.ts。pure（:effects #{}）。
+{:aiueos/component :app/ocel-event
+ :aiueos/kind :app
+ :aiueos/trust :untrusted
+ :aiueos/source "ocel_event.cljk"
+ :aiueos/wasm "ocel_event.wasm"
+ :aiueos/entry "main"
+ :aiueos/args []
+ :aiueos/imports #{}
+ :aiueos/exports #{:app/main
+                   :app/phase-ok
+                   :app/status-ok
+                   :app/event-admission
+                   :app/dedup-take}
+ :aiueos/effects #{}
+ :aiueos/limits {:memory-pages 16 :fuel 5000000}}
